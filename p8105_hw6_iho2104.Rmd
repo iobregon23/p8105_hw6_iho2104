@@ -1,0 +1,89 @@
+---
+title: "p8105_hw6_iho2104"
+author: "Ixtaccihuatl Obregon"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+library(boot)
+```
+
+# Problem 1 
+
+```{r}
+
+```
+
+# Problem 2
+
+```{r, eval=FALSE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31") |>
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |>
+  select(name, id, everything())
+
+model = lm(tmax ~ tmin + prcp, data = weather_df) 
+summary(model)
+
+r_sq = function(weather_df, indices){
+  sample_data = weather_df[indices, ]
+  model = lm(tmax ~ tmin + prcp, data = sample_data)
+  return(summary)
+}
+
+log_beta_product = function(weather_df, indices){
+  sample_data = weather_df[indices, ]
+  model = lm(tmax ~ tmin + prcp, data = sample_data)
+  coefficients = coef(model)
+  return(log(coefficients[2]*coefficients[3]))
+}
+
+set.seed(2023)
+boot_straps = 
+  weather_df |> 
+  modelr::bootstrap(n = 5000)
+
+weather_df |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = weather_df)),
+    results = map(models, broom::tidy)) |> 
+  select(-strap, -models) |> 
+  unnest(results) |> 
+  group_by(term) |> 
+  summarize(boot_se = sd(estimate))
+
+```
+
+
+
+# Problem 3 
+
+```{r}
+birthweight_df = read.csv("birthweight.csv") 
+str(birthweight_df)
+summary(birthweight_df)
+
+birthweight_df_tidy = birthweight_df |> 
+  janitor::clean_names() |> 
+  mutate( 
+    gaweeks = as.factor(gaweeks),
+    ppbmi = as.factor(ppbmi), 
+    smoken = as.factor(smoken)
+    )
+str(birthweight_df_tidy)
+
+missing_values = colSums(is.na(birthweight_df_tidy))
+print(missing_values)
+
+```
+
