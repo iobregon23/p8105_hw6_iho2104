@@ -11,6 +11,7 @@ library(boot)
 library(broom)
 library(purrr)
 library(ggplot2)
+library(modelr)
 ```
 
 # Problem 1 
@@ -124,53 +125,74 @@ Regression model for birth weight
 
 ```{r}
 bwt_model_1 = lm(bwt ~ gaweeks + smoken, data = birthweight_df_tidy)
-summary(bwt_graph_1)
-augmented_data_1 = augment(bwt_model_1)
-bwt_graph_1= ggplot(augmented_data_1, aes(x = .fitted, y = .resid)) +
-  geom_point(color = "blue") +
-  geom_smooth(method = "loess", color = "red") +
-  labs(title = "Residuals vs. Fitted Values",
-       x = "Fitted Values",
-       y = "Residuals")
-bwt_graph_1
-
-
-
 bwt_model_2 = lm(bwt ~ blength + gaweeks , data = birthweight_df_tidy)
-summary(bwt_model_2)
-augmented_data_2 = augment(bwt_model_2)
-bwt_graph_2 = ggplot(augmented_data_2, aes(x = .fitted, y = .resid)) +
-  geom_point(color = "blue") +
-  geom_smooth(method = "loess", color = "red") +
-  labs(title = "Residuals vs. Fitted Values",
-       x = "Fitted Values",
-       y = "Residuals")
-bwt_graph_2
-
-
-
 bwt_model_3 = lm(bwt ~ bhead*blength*babysex , data = birthweight_df_tidy)
+
+summary(bwt_model_1)
+summary(bwt_model_2)
 summary(bwt_model_3)
-augmented_data_3 = augment(bwt_model_3)
-bwt_graph_3 = ggplot(augmented_data_3, aes(x = .fitted, y = .resid)) +
+
+birthweight_df_tidy |> 
+  add_predictions(bwt_model_1) |> 
+  add_residuals(bwt_model_1) |> 
+  ggplot(aes(x = pred, y = resid)) +
   geom_point(color = "blue") +
   geom_smooth(method = "loess", color = "red") +
   labs(title = "Residuals vs. Fitted Values",
        x = "Fitted Values",
        y = "Residuals")
-bwt_graph_3
+
+birthweight_df_tidy |> 
+  add_predictions(bwt_model_2) |> 
+  add_residuals(bwt_model_2) |> 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "loess", color = "red") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals")
+
+birthweight_df_tidy |> 
+  add_predictions(bwt_model_3) |> 
+  add_residuals(bwt_model_3) |> 
+ggplot(aes(x = pred, y = resid)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "loess", color = "red") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals")
 ```
 
 Comparing 
 
 ```{r}
-models = list(bwt_model_1, bwt_model_2, bwt_model_3)
-model_names = c("bwt_model_1", "bwt_model_2", "bwt_model_3")
-calculate_cv_error = function(model, birthweight_df_tidy) {
-        cv_results = crossv_mc(model, birthweight_df_tidy, trControl = trainControl(method = "cv"))
-  return(mean(cv_results$results$RMSE))
-}
-cv_errors = map_dbl(models, ~calculate_cv_error(.x, birthweight_df_tidy))
-comparison = data.frame(Model =model_names, CV_errors = cv_errors)
-print(comparison)
+cv_df = 
+  crossv_mc(birthweight_df_tidy,1000) 
+
+cv_df =
+  cv_df |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df =
+  cv_df |>
+  mutate(
+    bwt_model_1a  = map(train, \(df) bwt_model_1),
+    bwt_model_2a  = map(train, \(df) bwt_model_2),
+    bwt_model_3a  = map(train, \(df) bwt_model_3)) |> 
+  mutate(
+    rmse_1 = map2_dbl(bwt_model_1a, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_2 = map2_dbl(bwt_model_2a, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_3 = map2_dbl(bwt_model_3a, test, \(mod, df) rmse(model = mod, data = df)))
+
+cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
