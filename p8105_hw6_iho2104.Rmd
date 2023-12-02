@@ -37,14 +37,12 @@ weather_df =
   select(name, id, everything())
 ```
 
-
+Bootstrap and r_sq and log_product
 
 ```{r}
 
-set.seed(2023)
-
 boot_straps = weather_df |> 
-  modelr::bootstrap(n = 50) |> 
+  modelr::bootstrap(n = 5000) |> 
   mutate(
     models = map(strap, ~lm(tmax ~ tmin + prcp, data = .)),
     results_1 = map(models, glance),
@@ -54,12 +52,31 @@ boot_straps = weather_df |>
   select(.id, r.squared, term, estimate) |> 
   filter(term !="(Intercept)") |> 
   pivot_wider(names_from = term, values_from = estimate) |> 
-  mutate(
-    log_product = tmin * prcp
+ mutate(
+    tmin = as.numeric(tmin),
+    prcp = as.numeric(prcp),
+    log_product = log(tmin * prcp)
   )
 
 ```
 
+Distribution
+
+```{r}
+
+ggplot(boot_straps, aes(x = r.squared)) +
+  geom_histogram(bins = 100, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of R-squared Estimates",
+       x = "R-squared",
+       y = "Frequency")
+
+
+ggplot(boot_straps, aes(x = log_product)) +
+  geom_histogram(bins = 100, fill = "green", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of log_product Estimates",
+       x = "log_product",
+       y = "Frequency")
+```
 
 # Problem 3 
 
