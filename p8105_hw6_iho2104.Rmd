@@ -78,6 +78,25 @@ ggplot(boot_straps, aes(x = log_product)) +
        y = "Frequency")
 ```
 
+CI Intervals
+
+```{r}
+r_sq_CI = 
+boot_straps |> 
+  group_by(.id) |> 
+  summarize(
+    ci_lower = quantile(r.squared, 0.025), 
+    ci_upper = quantile(r.squared, 0.975))
+
+log_product_CI = 
+boot_straps |> 
+  group_by(.id) |> 
+  summarize(
+    ci_lower = quantile(log_product, 0.025, na.rm = TRUE), 
+    ci_upper = quantile(log_product, 0.975, na.rm = TRUE))
+
+```
+
 # Problem 3 
 
 Load and clean the data
@@ -141,6 +160,7 @@ bwt_graph_3 = ggplot(augmented_data_3, aes(x = .fitted, y = .resid)) +
        y = "Residuals")
 bwt_graph_3
 ```
+
 Comparing 
 
 ```{r}
