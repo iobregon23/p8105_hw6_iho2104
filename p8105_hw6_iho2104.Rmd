@@ -16,9 +16,74 @@ library(modelr)
 
 # Problem 1 
 
-```{r}
-
+```{r q1_data_cleaning}
+homicide_df = 
+  read_csv("homicide-data.csv", na = c("", "NA", "Unknown")) |> 
+  mutate(
+    city_state = str_c(city, state, sep = ", "),
+    victim_age = as.numeric(victim_age),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ 0,
+      disposition == "Open/No arrest"        ~ 0,
+      disposition == "Closed by arrest"      ~ 1)
+  ) |> 
+  filter(victim_race %in% c("White", "Black")) |> 
+  filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"))) |> 
+  select(city_state, resolution, victim_age, victim_sex, victim_race)
 ```
+
+logistic regression model using only data from Baltimore, MD. 
+
+```{r q1_glm_baltimore}
+baltimore_glm = 
+  filter(homicide_df, city_state == "Baltimore, MD") |> 
+  glm(resolution ~ victim_age + victim_sex + victim_race, family = binomial(), data = _)
+
+baltimore_glm |> 
+  broom::tidy() |> 
+  mutate(
+    OR = exp(estimate), 
+    OR_CI_upper = exp(estimate + 1.96 * std.error),
+    OR_CI_lower = exp(estimate - 1.96 * std.error)) |> 
+  filter(term == "victim_sexMale") |> 
+  select(OR, OR_CI_lower, OR_CI_upper) |>
+  knitr::kable(digits = 3)
+```
+
+
+```{r q1_glm_all_cities}
+model_results = 
+  homicide_df |> 
+  nest(data = -city_state) |> 
+  mutate(
+    models = map(data, \(df) glm(resolution ~ victim_age + victim_sex + victim_race, 
+                             family = binomial(), data = df)),
+    tidy_models = map(models, broom::tidy)) |> 
+  select(-models, -data) |> 
+  unnest(cols = tidy_models) |> 
+  mutate(
+    OR = exp(estimate), 
+    OR_CI_upper = exp(estimate + 1.96 * std.error),
+    OR_CI_lower = exp(estimate - 1.96 * std.error)) |> 
+  filter(term == "victim_sexMale") |> 
+  select(city_state, OR, OR_CI_lower, OR_CI_upper)
+
+model_results |>
+  slice(1:5) |> 
+  knitr::kable(digits = 3)
+```
+
+
+```{r q1_plot}
+model_results |> 
+  mutate(city_state = fct_reorder(city_state, OR)) |> 
+  ggplot(aes(x = city_state, y = OR)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = OR_CI_lower, ymax = OR_CI_upper)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+A plot with estimated ORs and CIs for each city was generated. The plot showed OR was less than 1 in most cities, meaning crimes with male victims are less likely to be resolved compared to those with female victims after accounting for victim age/race. New York showed the most disparity. About half of the cities show a narrow CI that doesn't include 1, showing statistically significant deffience in resolution rates between the sexes after adjustments. 
 
 # Problem 2
 
@@ -79,6 +144,10 @@ ggplot(boot_straps, aes(x = log_product)) +
        x = "log_product",
        y = "Frequency")
 ```
+
+Describe distribution plots: The distribution plot for r_squared estimates showed a left-skewed distribution, showing most of the bootstraps for r_square are concentrated around 0.925. The distribution plot for log_product estimates showed a left-skewed distribution, showing most of the bootstraps for log_product are concentrated around -6. 
+
+
 
 CI Intervals
 
@@ -165,6 +234,8 @@ ggplot(aes(x = pred, y = resid)) +
        y = "Residuals")
 ```
 
+The linear regression models (bwt_model_1, bwt_model_2, and bwt_model_3) were constructed to predict the birthweight (bwt) based on gestational age in weeks (gaweeks) and a binary indicator for smoking during pregnancy (smoken) for bwt_model_1,  length at birth (blength) and gestational age in weeks (gaweeks) for bwt_model_2, and the interaction between head circumference at birth (bhead), length at birth (blength), and baby's sex (babysex) for bwt_model_3. add_predictions() and  add_residuals() were used to get fitted values and residuals. 
+
 Comparing 
 
 ```{r}
@@ -196,5 +267,6 @@ cv_df |>
     values_to = "rmse",
     names_prefix = "rmse_") |> 
   mutate(model = fct_inorder(model)) |> 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse)) + geom_violin()+
+  labs(title = "RMSE")
 ```
