@@ -8,6 +8,9 @@ output: github_document
 ```{r}
 library(tidyverse)
 library(boot)
+library(broom)
+library(purrr)
+library(ggplot2)
 ```
 
 # Problem 1 
@@ -18,7 +21,9 @@ library(boot)
 
 # Problem 2
 
-```{r, eval=FALSE}
+Load weather data
+
+```{r}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -30,43 +35,35 @@ weather_df =
     tmin = tmin / 10,
     tmax = tmax / 10) |>
   select(name, id, everything())
-
-model = lm(tmax ~ tmin + prcp, data = weather_df) 
-summary(model)
-
-r_sq = function(weather_df, indices){
-  sample_data = weather_df[indices, ]
-  model = lm(tmax ~ tmin + prcp, data = sample_data)
-  return(summary)
-}
-
-log_beta_product = function(weather_df, indices){
-  sample_data = weather_df[indices, ]
-  model = lm(tmax ~ tmin + prcp, data = sample_data)
-  coefficients = coef(model)
-  return(log(coefficients[2]*coefficients[3]))
-}
-
-set.seed(2023)
-boot_straps = 
-  weather_df |> 
-  modelr::bootstrap(n = 5000)
-
-weather_df |> 
-  modelr::bootstrap(n = 5000) |> 
-  mutate(
-    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = weather_df)),
-    results = map(models, broom::tidy)) |> 
-  select(-strap, -models) |> 
-  unnest(results) |> 
-  group_by(term) |> 
-  summarize(boot_se = sd(estimate))
-
 ```
 
 
 
+```{r}
+
+set.seed(2023)
+
+boot_straps = weather_df |> 
+  modelr::bootstrap(n = 50) |> 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin + prcp, data = .)),
+    results_1 = map(models, glance),
+    results_2 = map(models, tidy)) |> 
+  select(-strap, -models) |> 
+  unnest() |>
+  select(.id, r.squared, term, estimate) |> 
+  filter(term !="(Intercept)") |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
+  mutate(
+    log_product = tmin * prcp
+  )
+
+```
+
+
 # Problem 3 
+
+Load and clean the data
 
 ```{r}
 birthweight_df = read.csv("birthweight.csv") 
@@ -87,3 +84,56 @@ print(missing_values)
 
 ```
 
+Regression model for birth weight 
+
+```{r}
+bwt_model_1 = lm(bwt ~ gaweeks + smoken, data = birthweight_df_tidy)
+summary(bwt_graph_1)
+augmented_data_1 = augment(bwt_model_1)
+bwt_graph_1= ggplot(augmented_data_1, aes(x = .fitted, y = .resid)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "loess", color = "red") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals")
+bwt_graph_1
+
+
+
+bwt_model_2 = lm(bwt ~ blength + gaweeks , data = birthweight_df_tidy)
+summary(bwt_model_2)
+augmented_data_2 = augment(bwt_model_2)
+bwt_graph_2 = ggplot(augmented_data_2, aes(x = .fitted, y = .resid)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "loess", color = "red") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals")
+bwt_graph_2
+
+
+
+bwt_model_3 = lm(bwt ~ bhead*blength*babysex , data = birthweight_df_tidy)
+summary(bwt_model_3)
+augmented_data_3 = augment(bwt_model_3)
+bwt_graph_3 = ggplot(augmented_data_3, aes(x = .fitted, y = .resid)) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "loess", color = "red") +
+  labs(title = "Residuals vs. Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals")
+bwt_graph_3
+```
+Comparing 
+
+```{r}
+models = list(bwt_model_1, bwt_model_2, bwt_model_3)
+model_names = c("bwt_model_1", "bwt_model_2", "bwt_model_3")
+calculate_cv_error = function(model, birthweight_df_tidy) {
+        cv_results = crossv_mc(model, birthweight_df_tidy, trControl = trainControl(method = "cv"))
+  return(mean(cv_results$results$RMSE))
+}
+cv_errors = map_dbl(models, ~calculate_cv_error(.x, birthweight_df_tidy))
+comparison = data.frame(Model =model_names, CV_errors = cv_errors)
+print(comparison)
+```
